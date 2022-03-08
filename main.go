@@ -72,6 +72,11 @@ func main() {
         rand.Seed(time.Now().UnixNano())
     } else {
         rand.Seed(int64(s))
+        /* TODO: Currently, it won't reproduce exactly the same results for 
+           the same seed. There is some research to do in order to fix that.
+           I was hoping it would lead to exact reproducible results, but runs
+           still vary in detail even if the seed is the same. It is a long-term
+           goal to ensure reproducibility to that degree.  */
     }
 
     // Make a test Cohort: 

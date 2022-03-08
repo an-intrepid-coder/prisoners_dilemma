@@ -68,8 +68,8 @@ func (c *Cohort) SortByResources() {
 
 /* To evolve the Cohort, I followed the steps suggested by John Holland's
    paper. The size of the generation never changes. The next generation is
-   first filled by the offspring of fit parents, then by the fit parents
-   themselves, and then by however many of the rest can fit. The Cohort is
+   first filled by the fit parents themselves, then by the offspring of fit 
+   parents, and then by however many of the rest can fit. The Cohort is
    shuffled at the end of every Evolve() just to be safe.  */
 func (c *Cohort) Evolve(n int, g int) {
 

@@ -274,10 +274,7 @@ func pdGeneration(c *cas.Cohort, rounds int, depth int) {
    the Cohort (including themselves), and the winner is the one with the
    most wins.  */
 func pdChamp(c *cas.Cohort, rounds int, depth int) cas.Agent {
-    r := make([]int, c.Size()) // TODO: find out if this auto-inits to 0
-    for i := range r {
-        r[i] = 0
-    }
+    r := make([]int, c.Size()) 
 
     c.ToggleAllBusy()
 

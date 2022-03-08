@@ -15,7 +15,7 @@
     
 2. Until the desired fitness goal is reached, the `Cohort` passes through "generations". During each generation, each `Agent` in the `Cohort` plays a randomly generated opponent. Since the search space is so large, random opponents should be very bad in general. A "game" is an iterative game of `Prisoner's Dilemma`, played over many rounds (100 by default). This step happens concurrently for best performance. 
     
-3. When the desired fitness goal is reached ("fitness" being defined as the percentage of a `Cohort` which can win against a random opponent), the final state of the Cohort contains a body of good `Rules`. But which is best? To find out, they each play each other and the best one is the "champion".
+3. When the desired fitness goal is reached ("fitness" being defined as the percentage of a `Cohort` which can win against a random opponent), the final state of the Cohort contains a body of good `Rules`. But which is best? To find out, they each play each other and the best one is the "champion". This step also happens concurrently for best performance.
     
 4. The user is presented with some basic information about the state of the Cohort at the end of the simulation, and about the "champion" in the final Cohort. I have not implemented any serious logging, but I probably will before moving on to other projects of this nature.
    

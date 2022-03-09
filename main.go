@@ -307,7 +307,7 @@ func pdChamp(c *cas.Cohort, rounds int, depth int) cas.Agent {
 
     for i := range r {
         go func(k int) {
-            a := c.Member(i)
+            a := c.Member(k)
             for j := range r {
                 b := c.Member(j)
                 w := pdGame(a, b, rounds, false, depth)

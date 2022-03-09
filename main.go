@@ -9,6 +9,7 @@ import (
 
     "github.com/prisoners_dilemma/cas"
     "github.com/prisoners_dilemma/queue"
+    "github.com/prisoners_dilemma/util"
 )
 
 const (
@@ -44,6 +45,8 @@ const (
     REPRODUCTION_THRESHOLD = 3
     GENERATION_CAP = 10000 
     FITNESS_GOAL = 99.0
+    
+    RANDOM_SAMPLE_SIZE = 1000000
 
     USE_SYSTEM_TIME = -1
     SQUELCH_NOTIFICATIONS = -1
@@ -136,7 +139,7 @@ func main() {
     fmt.Println("Cohort evolution complete!")
     fmt.Printf("\tCohort has %d members.\n", c.Metadata.Size)
     fmt.Printf("\tCohort ran for %d generations.\n", c.Metadata.Generation)
-    fmt.Printf("\tCohort fitness score is: %f\n", c.Metadata.Fitness)
+    fmt.Printf("\tCohort fitness score is: %.02f\n", c.Metadata.Fitness)
 
     // Find the best member of the Cohort:
     fmt.Println("Finding champion...")
@@ -144,10 +147,10 @@ func main() {
 
     // TODO: Progress notifications for pdChamp() stage
 
-    // Print final results:
+    // Print initial results:
     fmt.Println("Champion found!")
     fmt.Printf("\tChampion ID #%d\n", v.Metadata.Id)
-    fmt.Printf("\tChampion Generation: %d\n", v.Metadata.Generation)
+    fmt.Printf("\tChampion Generation: %d (age: %d)\n", v.Metadata.Generation, c.Generation() - v.Metadata.Generation - 1) 
     fmt.Printf("\tChampion Resources: %d\n", v.Metadata.Resources)
     fmt.Printf("\tChampion Wins/Losses: %d / %d (%.02f)\n", v.Metadata.Wins, v.Metadata.Losses, v.Metadata.WinRate)
     fmt.Print("\tChampion Classifier Rule: ")
@@ -156,8 +159,50 @@ func main() {
         fmt.Print(x[i])
     }
     fmt.Print("\n")
+
+    // Print final results:
+    fmt.Printf("Testing Champion against %d random samples...\n", RANDOM_SAMPLE_SIZE)
+    cr := pdTestAgentAgainstSamples(v, args["-numRounds="], DECISION_DEPTH, RANDOM_SAMPLE_SIZE)
+    fmt.Printf("\tChampion win/loss percentage vs. random samples: %.02f\n", cr)
 }
 
+/* Tests an Agent against a given number of random Agents (preferably a very large
+   number) to get a good idea of what its general effectiveness is as a Prisoner's
+   Dilemma Classifier Rule. This is so that the "Champions" of multiple Cohorts can
+   be compared against each other.  */
+func pdTestAgentAgainstSamples(a *cas.Agent, rounds int, depth int, samples int) float64 {
+    cw, cl := 0, 0 
+    // TODO: General Concurrency Lock shared between this and Cohort!
+    lk := make([]bool, samples) // pretty sure these init to false TODO: find out
+    for i := 0; i < samples; i++ {
+        go func(k int) {
+            b := cas.MakeAgent()
+            w := pdGame(a, &b, rounds, false, DECISION_DEPTH)
+            if w == a {
+                cw++
+            } else {
+                cl++
+            }
+            lk[k] = true
+        }(i)
+    }
+    // join:
+    for ;; {
+        r := true
+        for i := range lk {
+            if !lk[i] {
+                r = false
+                break
+            }
+        }
+        if r {
+            break
+        }
+    }
+    return util.Percent(float64(cw), float64(cw + cl))
+}
+
+// Plays a game of Prisoner's Dilemma and returns a pointer to the winner:
 func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas.Agent { 
     // Random player goes first:              
     p := []*cas.Agent{a, b}
@@ -269,7 +314,7 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
     // Update metadata:
     f := func(u *cas.Agent) {
         y, z := u.Metadata.Wins, u.Metadata.Losses
-        u.Metadata.WinRate = float64(y) / float64(y + z) * 100.0
+        u.Metadata.WinRate = util.Percent(float64(y), float64(y + z))
     }
     f(a)
     f(b)
@@ -294,13 +339,13 @@ func pdGeneration(c *cas.Cohort, rounds int, depth int) {
     c.ConcurrentJoin()
 
     // Calculate fitness for current generation:
-    c.SetFitness(float64(numFit) / float64(c.Size()) * 100.0)
+    c.SetFitness(util.Percent(float64(numFit), float64(c.Size())))
 }
 
 /* To find the champ, each member of the Cohort plays each other member of
    the Cohort (including themselves), and the winner is the one with the
    most wins.  */
-func pdChamp(c *cas.Cohort, rounds int, depth int) cas.Agent {
+func pdChamp(c *cas.Cohort, rounds int, depth int) *cas.Agent {
     r := make([]int, c.Size()) 
 
     c.ToggleAllBusy()
@@ -329,6 +374,6 @@ func pdChamp(c *cas.Cohort, rounds int, depth int) cas.Agent {
             v = c.Member(i)
         }
     }
-    return *v
+    return v
 }
 

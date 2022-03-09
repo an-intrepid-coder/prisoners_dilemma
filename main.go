@@ -12,7 +12,33 @@ import (
 )
 
 const (
+    /* TODO: Arbitrary decision depth. Also, using the
+       methods discussed below to compare Cohorts of
+       different depths.  */
     DECISION_DEPTH = 3 
+
+    /* TODO: Currently, the simulation reaches the fitness
+       goal much faster when the Cohort Size is smaller. 
+       This is because the fitness goal is defined as 
+       the percentage of the Cohort which can beat a randomly
+       generated Rule. This is arguably a very low bar, considering
+       the non-viability of most Classifier Rules in the immense
+       2^64 search space. The next step in the cas/ API is to 
+       determine to what extent these are local maximums. This
+       can be done by running multiple Cohorts in parallel and
+       testing their "Champions" against each other. As noted in
+       John Holland's books and papers, this is a good way to
+       try and solve some problems within certain constraints.
+       Taking it a level or two higher in scope allows for solving
+       more complex problems. By raising it one scope level higher
+       (which is the next major improvement) it will be possible
+       to objectively determine which of the below parameters
+       leads to the best Classifier Rule for the game of 
+       Prisoner's Dilemma, in the shortest amount of time.
+       This opens the door for using the framework on other parts 
+       of Game Theory, for example, which will hopefully involve 
+       raising the scope further.  */
+
     COHORT_SIZE = 100
     NUM_ROUNDS = 100   
     REPRODUCTION_THRESHOLD = 3
@@ -88,7 +114,6 @@ func main() {
     for ;; {
         if args["-notifications="] != SQUELCH_NOTIFICATIONS {
             fmt.Printf("Beginning generation #%d\n", c.Generation())
-            fmt.Printf("\tCohort Fitness: %.02f\n", c.Fitness())
         }
 
         // Process the generation:
@@ -161,7 +186,7 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
 
     // Queues are used to hold turn memory:
     qa, qb := queue.MakeQueue(depth), queue.MakeQueue(depth)
-    for i := 0; i < DECISION_DEPTH; i++ {
+    for i := 0; i < depth; i++ {
         qa.Insert(0)
         qb.Insert(0)
     }
@@ -228,10 +253,12 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
         w = a
         if counts {
             a.Metadata.Wins++
+            b.Metadata.Losses++
         }
     } else {
         w = b
         if counts {
+            a.Metadata.Losses++
             b.Metadata.Wins++
         }
     }
@@ -279,16 +306,16 @@ func pdChamp(c *cas.Cohort, rounds int, depth int) cas.Agent {
     c.ToggleAllBusy()
 
     for i := range r {
-        go func(j int) {
+        go func(k int) {
             a := c.Member(i)
             for j := range r {
                 b := c.Member(j)
                 w := pdGame(a, b, rounds, false, depth)
-                if *w == *a {
-                    r[i]++
+                if w.Id() == a.Id() {
+                    r[k]++
                 }
             }
-            c.ToggleFinished(j)
+            c.ToggleFinished(k)
         }(i)
     }
 

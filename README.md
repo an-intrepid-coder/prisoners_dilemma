@@ -3,6 +3,16 @@
 
 **Description**: Not that long ago, inspired by a paper [Genetic Algorithms by John Holland](http://www2.econ.iastate.edu/tesfatsi/holland.GAIntro.htm) and also by a book written by the same author ("Signals and Boundaries"), I wrote a toy framework for exploring the problem using Kotlin, which can be found [here](https://github.com/sgibber2018/GeneticPlayground). Although that was a successful attempt, I was left wanting to try again from the ground up in order to do things a little differently. I took the opportunity to learn some Go while having another whack at the project, and I am glad I did because Go turns out to lend itself very well to this kind of thing. Kotlin is no slouch either, but I very much enjoyed using Go for this project. I am somewhat more comfortable writing this style of code than I am with Kotlin. Unlike the Kotlin version, this is a pure CLI toy with no frills. I have improved on some aspects of its performance and architecture, and this supersedes that one in pretty much every way. 
 
+**Examples:** Here are some example images showing a couple of different results based on different parameters:
+
+![Quick example using default params.](images/quickDefault.png)
+
+In the above example, the default settings are used. These are quick defaults chosen arbitrarily. It takes longer to test the result in this case than it does to generate it! However, it still leads to a 90%+ Rule, usually. In the near future I am going to find the optimal defaults for a given timeframe and desired fitness rating by raising the experiment one scope higher; using this program as the input for another Genetic Algorithm. 
+
+![Example small cohort finds a local maximum.](images/localMax.png)
+
+In the above example, I gave it a fitness goal of 100%. This means that every single Agent in the Cohort has beaten a randomly generated Prisoner's Dilemma Classifier Rule that generation. This is actually possible at smaller Cohorts (such as this example, at 300). However, it can be misleading. The above example is pretty good, having won 97.36% of its test matches against 1 Million randomly generated Agents (the benchmark method I am using). Even so, it is a "local maximum" in a sense. A larger Cohort would have found it harder (or even impossible) to hit 100%. There are still more things I can do to refine the test.
+
 **Status**: I will probably make some more improvements to this before moving on to the next project. The idea is for the `cas/` library to be usable in a variety of contexts, and Prisoner's Dilemma is a basic example. I will not move on from Prisoner's Dilemma just yet, but I plan to use these concepts to explore some other games (and also some models in some papers I found interesting) in the near future. So this was really a proof of concept, as well as an excuse to learn some Go.
 
 **Installation**: Assuming you have Go installed, all you should need to do is clone this repository and then use `go install`. There are no external requirements, it runs in parallel, and it is fairly performant in space and time. 

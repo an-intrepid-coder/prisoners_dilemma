@@ -1,7 +1,5 @@
 package lock
 
-// TODO: Unit tests
-
 type Lock struct {
     size int
     busy []bool

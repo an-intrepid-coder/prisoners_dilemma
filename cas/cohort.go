@@ -3,6 +3,8 @@ package cas
 import (
     "math/rand"
     "sort"
+
+    "github.com/prisoners_dilemma/lock"
 )
 
 type CohortMetadata struct { 
@@ -20,7 +22,7 @@ type CohortMetadata struct {
 type Cohort struct {
     size int
     members []Agent
-    busy []bool
+    Lock lock.Lock
     generation int
     fitness float64
     Metadata CohortMetadata
@@ -45,10 +47,9 @@ func (c *Cohort) init(n int) {
     }
     c.size = m
     c.members = make([]Agent, m)
-    c.busy = make([]bool, m)
+    c.Lock = lock.MakeLock(m)
     for i := 0; i < m; i++ {
         c.members[i] = MakeAgent()
-        c.busy[i] = false
     }
     c.generation = 0
     c.fitness = 0.0
@@ -133,38 +134,5 @@ func (c *Cohort) Member(i int) *Agent {
 
 func (c *Cohort) Size() int {
     return c.size
-}
-
-/* "sets" the concurrent "lock". ConcurrentJoin() won't
-   finish while any members are busy.  */
-func (c *Cohort) ToggleAllBusy() {
-    for i := range c.busy {
-        c.busy[i] = true
-    }
-}
-
-// Releases the concurrency lock for a given member.  
-func (c *Cohort) ToggleFinished(n int) {
-    c.busy[n] = false
-}
-
-// Returns true if all members are unlocked.  
-func (c *Cohort) AllFinished() bool {
-    for i := range c.busy {
-        if c.busy[i] {
-            return false
-        }
-    }
-    return true
-}
-
-/* Delays execution until all members of the Cohort are
-   no longer busy.  */
-func (c *Cohort) ConcurrentJoin() {
-    for ;; {
-        if c.AllFinished() {
-            break
-        }
-    }
 }
 

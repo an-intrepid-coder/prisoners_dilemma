@@ -10,9 +10,6 @@ import (
     "github.com/prisoners_dilemma/util"
 )
 
-// This function will wrap the whole program thus far and enable 
-// taking it a scope further in the future:
-
 type DiscoverPdRuleMetadata struct {
     DecisionDepth int
     CohortSize int
@@ -20,16 +17,14 @@ type DiscoverPdRuleMetadata struct {
     ResourceThreshold int
     GenerationCap int
     FitnessGoal int
-    /* TODO: Currently, it won't reproduce exactly the same results for 
-       the same seed. There is some research to do in order to fix that.
-       I was hoping it would lead to exact reproducible results, but runs
-       still vary in detail even if the seed is the same. It is a long-term
-       goal to ensure reproducibility to that degree.  */
     Seed int64
     GenerationsUsed int
     Rule []int
     RuleWinPercent float64
     MutationFrequency int
+    ControlSampleSize int
+    GamesPerGen int
+    // TODO: Track time taken
 }
 
 func DiscoverPdRule(seed int64,
@@ -39,8 +34,12 @@ func DiscoverPdRule(seed int64,
                     depth int,
                     rThreshold int,
                     genCap int,
-                    fitGoal int) DiscoverPdRuleMetadata {
-    // Seed the PRNG:
+                    fitGoal int,
+                    mutationFrequency int,
+                    controlSampleSize int,
+                    gamesPerGen int) DiscoverPdRuleMetadata {
+
+    // Seed the PRNG (NOTE: currently does not result in step-for-step reproducibility)
     if seed == USE_SYSTEM_TIME {
         rand.Seed(seed)
     } else {
@@ -61,10 +60,10 @@ func DiscoverPdRule(seed int64,
         }
 
         // Process the generation:
-        pdGeneration(&c, numRounds, depth)
+        pdGeneration(&c, numRounds, depth, gamesPerGen)
 
         // Evolve the Cohort:
-        c.Evolve(rThreshold, c.Generation() + 1)
+        c.Evolve(rThreshold, c.Generation() + 1, mutationFrequency)
 
         if !squelch {
             fmt.Printf("\tCohort Fitness: %.02f\n", c.Fitness())
@@ -90,8 +89,6 @@ func DiscoverPdRule(seed int64,
     }
     v := pdChamp(&c, numRounds, depth)
 
-    // TODO: Progress notifications for pdChamp() stage
-
     // Print initial results:
     if !squelch {
         fmt.Println("Champion found!")
@@ -111,7 +108,7 @@ func DiscoverPdRule(seed int64,
     if !squelch {
         fmt.Printf("Testing Champion against %d random samples...\n", RANDOM_SAMPLE_SIZE)
     }
-    cr := pdTestAgentAgainstSamples(v, numRounds, depth, RANDOM_SAMPLE_SIZE)
+    cr := pdTestAgentAgainstSamples(v, numRounds, depth, controlSampleSize)
     if !squelch {
         fmt.Printf("\tChampion win/loss percentage vs. random samples: %.02f\n", cr)
     }
@@ -129,6 +126,8 @@ func DiscoverPdRule(seed int64,
     md.Rule = v.Rule()
     md.RuleWinPercent = cr
     md.MutationFrequency = MUTATION_FREQUENCY
+    md.ControlSampleSize = controlSampleSize
+    md.GamesPerGen = gamesPerGen
     return md
 }
 
@@ -162,26 +161,20 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
     p := []*cas.Agent{a, b}
     t := rand.Intn(2)
 
-    /* NOTE: Counts two kinds of scores: total cumulative
-    "points" over the game, and number of rounds "won". In the
-    spirit of the game, I am defining a "won" round as being one
-    in which the player scores less than or equal to their 
-    opponent, as opposed to strictly less. I am going to use the
-    cumulative points as the default for now, but later on I will
-    measure and contrast both during runtime. Note that, as in
-    golf, the lower score is better. The Wikipedia article on 
-    Prisoner's Dilemma uses negative scores, while some other
-    people use positive ones. This has no real effect on the
-    game as long as the comparisons are consistent. Although 
-    a round can be "won" by both players in the event of
-    mutual cooperation or defection, the game as a sequence
-    of rounds can only go to one of the players.  */
+    /* NOTE: In the spirit of the game, I am defining a "won" round 
+       as being one in which the player scores less than or equal to 
+       their opponent, as opposed to strictly less. I am going to use 
+       the cumulative points as the default for now, but later on I will
+       measure and contrast both during runtime. Note that, as in golf, 
+       the lower score is better. The Wikipedia article on Prisoner's 
+       Dilemma uses negative scores, while some other people use positive 
+       ones. This has no real effect on the game as long as the comparisons 
+       are consistent. Although a round can be "won" by both players in the 
+       event of mutual cooperation or defection, the game as a sequence of 
+       rounds can only go to one of the players.  */
 
     // Cumulative "points":
     sa, sb := 0, 0
-
-    // Cumulative "wins":
-    wa, wb := 0, 0
 
     // Queues are used to hold turn memory:
     qa, qb := queue.MakeQueue(depth), queue.MakeQueue(depth)
@@ -225,7 +218,7 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
             t = (t + 1) % 2
         }
 
-        // Tally wins/points: 
+        // Tally points: 
         if ra == COOPERATE && rb == COOPERATE {
             ra, rb = REWARD, REWARD
         } else if ra == COOPERATE && rb == DEFECT {
@@ -237,12 +230,6 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
         }
         sa += ra
         sb += rb
-        if ra <= rb {
-            wa++
-        }
-        if rb <= ra {
-            wb++
-        }
     }
     /* Award resources to the one who got the least points. In the
        future, it may also award for the most "wins". In the unlikely
@@ -275,23 +262,39 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
     return w
 }
 
-func pdGeneration(c *cas.Cohort, rounds int, depth int) {
+/* Runs the Cohort through a "generation". This involves
+   nested concurrency, as each Agent in the cohort plays
+   multiple randomly generated Agents each generation. */
+func pdGeneration(c *cas.Cohort, rounds int, depth int, gamesPerGeneration int) {
     c.Lock.ToggleAllBusy()
-    numFit := 0
-    // Send each individual game to a goroutine for concurrent processing:
+    f := make([]float64, c.Size())
     for i := 0; i < c.Size(); i++ { 
-        go func(j int) { 
-            a, b := c.Member(j), cas.MakeAgent()
-            w := pdGame(a, &b, rounds, true, depth) 
-            if *w == *a {
-                numFit++
+        go func(j int) {
+            lk := lock.MakeLock(gamesPerGeneration)
+            lk.ToggleAllBusy()
+            p := 0
+            for k := 0; k < lk.Size(); k++ {
+                go func(h int) { 
+                    a, b := c.Member(j), cas.MakeAgent()
+                    w := pdGame(a, &b, rounds, true, depth) 
+                    if *w == *a {
+                        p++
+                    }
+                    lk.ToggleFinished(h)
+                }(k) 
             }
+            lk.ConcurrentJoin()
+            f[j] = float64(p)
             c.Lock.ToggleFinished(j)
-        }(i) 
+        }(i)
     } 
     c.Lock.ConcurrentJoin()
     // Calculate fitness for current generation:
-    c.SetFitness(util.Percent(float64(numFit), float64(c.Size())))
+    s := 0.0
+    for i := range f { 
+        s += f[i]
+    }
+    c.SetFitness(util.Percent(s, float64(len(f) * GAMES_PER_GENERATION)))
 }
 
 /* To find the champ, each member of the Cohort plays each other member of

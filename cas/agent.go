@@ -45,9 +45,9 @@ func (a *Agent) CalcMove(s []int) int {
 /* Creates two new Agents with Classifier rules that are
    genetically crossed over reproductions of the parent
    Classifiers.  */
-func (a *Agent) Combine(b *Agent) []Agent {
+func (a *Agent) Combine(b *Agent, freq int) []Agent {
     c, d := MakeAgent(), MakeAgent()
-    s := a.classifier.Combine(b.classifier)
+    s := a.classifier.Combine(b.classifier, freq)
     c.classifier = &s[0]
     d.classifier = &s[1]
     return []Agent{c, d}

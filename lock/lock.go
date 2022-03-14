@@ -5,6 +5,10 @@ type Lock struct {
     busy []bool
 }
 
+func (lk *Lock) Size() int {
+    return lk.size
+}
+
 func (lk *Lock) init(n int) {
     lk.size = n
     lk.busy = make([]bool, n)

@@ -10,10 +10,6 @@ const (
        not really bits as each one here is an integer word 
        in size despite being a 1 or 0).  */
     CLASSIFIER_BITS = 64
-
-    /* In John Holland's paper, a mutation frequency of 
-       1/10,000 was suggested as a good starting point.  */
-    MUTATION_FREQ = 10000
 )
 
 type Classifier struct {
@@ -61,7 +57,7 @@ func (c *Classifier) CalcMove(s []int) int {
 /* As suggested in John Holland's paper, this combines two
    Classifiers by performing "Genetic Crossover" on their
    rules.  */
-func (c *Classifier) Combine(d *Classifier) []Classifier {
+func (c *Classifier) Combine(d *Classifier, freq int) []Classifier {
     a, b := MakeClassifier(), MakeClassifier()
 
     // A random pivot is chosen:
@@ -81,7 +77,7 @@ func (c *Classifier) Combine(d *Classifier) []Classifier {
     }
     // Mutation chance is applied:
     f := func(n int) int { 
-        if rand.Intn(MUTATION_FREQ) == 0 {
+        if rand.Intn(freq) == 0 {
             return (n + 1) % 2 
         }
         return n

@@ -72,7 +72,7 @@ func (c *Cohort) SortByResources() {
    first filled by the fit parents themselves, then by the offspring of fit 
    parents, and then by however many of the rest can fit. The Cohort is
    shuffled at the end of every Evolve() just to be safe.  */
-func (c *Cohort) Evolve(n int, g int) {
+func (c *Cohort) Evolve(n int, g int, freq int) {
 
     // Sort generation in descending order by resources
     c.SortByResources()
@@ -81,9 +81,9 @@ func (c *Cohort) Evolve(n int, g int) {
     s := make([]Agent, c.size, c.size)
 
     r := 0
-    for ;; {
+    for ; r < c.size ; {
         a := c.members[r]
-        if a.Resources() < n  || r >= c.size {
+        if a.Resources() < n {
             break
         }
         s[r] = a
@@ -103,7 +103,7 @@ func (c *Cohort) Evolve(n int, g int) {
 
     for i := 0; i < q; i += 2 {
         a, b := &s[i], &s[i + 1]
-        p := a.Combine(b)
+        p := a.Combine(b, freq)
         for j := range p {
             p[j].Metadata.Generation = g
             if r < c.size {

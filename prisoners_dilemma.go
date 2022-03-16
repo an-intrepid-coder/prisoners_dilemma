@@ -56,7 +56,7 @@ func DiscoverPdRule(seed int64,
     // Process/Evolve Loop:
     for ;; {
         if !squelch {
-            fmt.Printf("Beginning generation #%d\n", c.Generation())
+            fmt.Printf("Generation %d / %d\n", c.Generation(), genCap - 1)
         }
 
         // Process the generation:

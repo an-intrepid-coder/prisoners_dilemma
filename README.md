@@ -41,5 +41,5 @@ Here is an example of the results of a run using the default parameters.
 
 **Extra**: Here is an extended example of the program runing with `-decisionDepth=<int>` set to 6. Note that the `Classifier Rule` is now 4096 "bits" in size, which adds up a lot when each "bit" is actually a 32-bit integer! Although it does take longer and the final result is slightly less accurate for the same `controlSampleSize=<int>`, it still works very well at this level and can go even further if optimized for it.
 
-![bigger screenshot](images/image2)
+![bigger screenshot](images/image2.png)
 

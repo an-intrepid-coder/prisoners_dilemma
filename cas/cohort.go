@@ -40,7 +40,7 @@ func (c *Cohort) Generation() int {
     return c.generation
 }
 
-func (c *Cohort) init(n int) {
+func (c *Cohort) init(n int, d int) {
     m := n
     if m % 2 != 0 {
         m++
@@ -49,15 +49,15 @@ func (c *Cohort) init(n int) {
     c.members = make([]Agent, m)
     c.Lock = lock.MakeLock(m)
     for i := 0; i < m; i++ {
-        c.members[i] = MakeAgent()
+        c.members[i] = MakeAgent(d)
     }
     c.generation = 0
     c.fitness = 0.0
 }
 
-func MakeCohort(n int) Cohort {
+func MakeCohort(n int, d int) Cohort {
     c := Cohort{}
-    c.init(n)
+    c.init(n, d)
     return c
 }
 

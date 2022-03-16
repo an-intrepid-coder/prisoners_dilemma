@@ -44,6 +44,11 @@ func main() {
 
     squelch := args["-notifications="] == SQUELCH_NOTIFICATIONS
 
+    depth := args["-decisionDepth="]
+    if depth > DEPTH_CAP {
+        depth = DEPTH_CAP
+    }
+
     fmt.Println("... computing ...")
 
     // Discover a rule for Prisoner's Dilemma:
@@ -51,7 +56,7 @@ func main() {
                         args["-cohortSize="],
                         squelch,
                         args["-numRounds="],
-                        DECISION_DEPTH,
+                        depth,
                         args["-rThreshold="],
                         args["-genCap="],
                         args["-fitGoal="],
@@ -70,6 +75,7 @@ func main() {
     fmt.Printf("\tIt took %d / %d generations.\n", r.GenerationsUsed, r.GenerationCap)
     fmt.Printf("\tDecision depth used: %d rounds\n", r.DecisionDepth)
     fmt.Printf("\tCohort size used: %d Agents\n", r.CohortSize)
+    fmt.Printf("\tSize of search space: 2^%d 'bits'\n", util.Pow2Int(r.DecisionDepth * 2))
     fmt.Printf("\tNumber of rounds used: %d rounds/game\n", r.NumRounds)
     fmt.Printf("\tResource threshold used: %d\n", r.ResourceThreshold)
     fmt.Printf("\tCohort fitness goal used: %d percent\n", r.FitnessGoal)

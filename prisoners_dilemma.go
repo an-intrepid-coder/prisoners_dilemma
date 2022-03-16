@@ -47,7 +47,7 @@ func DiscoverPdRule(seed int64,
     }
 
     // Make a Cohort: 
-    c := cas.MakeCohort(cohortSize)
+    c := cas.MakeCohort(cohortSize, depth)
 
     if !squelch {
         fmt.Println("Discovering Prisoner's Dilemma Rule...")
@@ -60,7 +60,7 @@ func DiscoverPdRule(seed int64,
         }
 
         // Process the generation:
-        pdGeneration(&c, numRounds, depth, gamesPerGen)
+        pdGeneration(&c, numRounds, depth, gamesPerGen, squelch)
 
         // Evolve the Cohort:
         c.Evolve(rThreshold, c.Generation() + 1, mutationFrequency)
@@ -106,9 +106,9 @@ func DiscoverPdRule(seed int64,
 
     // Print final results:
     if !squelch {
-        fmt.Printf("Testing Champion against %d random samples...\n", RANDOM_SAMPLE_SIZE)
+        fmt.Printf("Testing Champion against %d random samples...\n", controlSampleSize)
     }
-    cr := pdTestAgentAgainstSamples(v, numRounds, depth, controlSampleSize)
+    cr := pdTestAgentAgainstSamples(v, numRounds, depth, controlSampleSize, squelch)
     if !squelch {
         fmt.Printf("\tChampion win/loss percentage vs. random samples: %.02f\n", cr)
     }
@@ -125,7 +125,7 @@ func DiscoverPdRule(seed int64,
     md.GenerationsUsed = c.Generation()
     md.Rule = v.Rule()
     md.RuleWinPercent = cr
-    md.MutationFrequency = MUTATION_FREQUENCY
+    md.MutationFrequency = mutationFrequency 
     md.ControlSampleSize = controlSampleSize
     md.GamesPerGen = gamesPerGen
     return md
@@ -133,23 +133,48 @@ func DiscoverPdRule(seed int64,
 
 /* Tests an Agent against a given number of random Agents (preferably a very large
 number) to get a good idea of what its general effectiveness is as a Prisoner's
-Dilemma Classifier Rule. This is so that the "Champions" of multiple Cohorts can
-be compared against each other.  */
-func pdTestAgentAgainstSamples(a *cas.Agent, rounds int, depth int, samples int) float64 {
+Dilemma Classifier Rule.  */
+func pdTestAgentAgainstSamples(a *cas.Agent, 
+                               rounds int, 
+                               depth int, 
+                               samples int, 
+                               squelch bool) float64 {
     cw, cl := 0, 0 
     lk := lock.MakeLock(samples)
     lk.ToggleAllBusy()
-    for i := 0; i < samples; i++ {
-        go func(k int) {
-            b := cas.MakeAgent()
-            w := pdGame(a, &b, rounds, false, DECISION_DEPTH)
-            if w == a {
-                cw++
-            } else {
-                cl++
-            }
-            lk.ToggleFinished(k)
-        }(i)
+    x := 0.0
+    z := 0
+    cur := 0
+    size := util.Pow2Int(depth * 2) * 32 * 2
+    max := SPACE_CAP / size
+    for i := 0; i < samples; {
+        if cur < max {
+            cur++
+            go func(k int) {
+                b := cas.MakeAgent(depth)
+                w := pdGame(a, &b, rounds, false, depth)
+                if w == a {
+                    cw++
+                } else {
+                    cl++
+                }
+                if !squelch {
+                    x += 1.0
+                    y := int(x / float64(samples) * 100.0)
+                    if y > z {
+                        z = y
+                        if z % 10 == 0 {
+                            fmt.Printf("Samples %d percent finished...\n", z)
+                            fmt.Printf("\t%d samples run so far\n", i)
+                            fmt.Printf("\t%d / %d games currently running\n", cur, max)
+                        }
+                    }
+                }
+                cur--
+                lk.ToggleFinished(k)
+            }(i)
+            i++
+        }
     }
     lk.ConcurrentJoin()
     return util.Percent(float64(cw), float64(cw + cl))
@@ -160,18 +185,6 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
     // Random player goes first:              
     p := []*cas.Agent{a, b}
     t := rand.Intn(2)
-
-    /* NOTE: In the spirit of the game, I am defining a "won" round 
-       as being one in which the player scores less than or equal to 
-       their opponent, as opposed to strictly less. I am going to use 
-       the cumulative points as the default for now, but later on I will
-       measure and contrast both during runtime. Note that, as in golf, 
-       the lower score is better. The Wikipedia article on Prisoner's 
-       Dilemma uses negative scores, while some other people use positive 
-       ones. This has no real effect on the game as long as the comparisons 
-       are consistent. Although a round can be "won" by both players in the 
-       event of mutual cooperation or defection, the game as a sequence of 
-       rounds can only go to one of the players.  */
 
     // Cumulative "points":
     sa, sb := 0, 0
@@ -231,9 +244,7 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
         sa += ra
         sb += rb
     }
-    /* Award resources to the one who got the least points. In the
-       future, it may also award for the most "wins". In the unlikely
-       event of a draw here neither get a reward.  */
+    // Award resources to the one who got the least points:
     var w *cas.Agent
     if sa < sb {
         w = a
@@ -265,28 +276,54 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
 /* Runs the Cohort through a "generation". This involves
    nested concurrency, as each Agent in the cohort plays
    multiple randomly generated Agents each generation. */
-func pdGeneration(c *cas.Cohort, rounds int, depth int, gamesPerGeneration int) {
+func pdGeneration(c *cas.Cohort, 
+                  rounds int, 
+                  depth int, 
+                  gamesPerGeneration int,
+                  squelch bool) {
     c.Lock.ToggleAllBusy()
     f := make([]float64, c.Size())
-    for i := 0; i < c.Size(); i++ { 
-        go func(j int) {
-            lk := lock.MakeLock(gamesPerGeneration)
-            lk.ToggleAllBusy()
-            p := 0
-            for k := 0; k < lk.Size(); k++ {
-                go func(h int) { 
-                    a, b := c.Member(j), cas.MakeAgent()
-                    w := pdGame(a, &b, rounds, true, depth) 
-                    if *w == *a {
-                        p++
+    cur := 0
+    size := util.Pow2Int(depth * 2) * 32 * 2 * gamesPerGeneration
+    // TODO: Double check this one ^
+    max := SPACE_CAP / size
+    x := 0.0 //
+    z := 0   //
+    for i := 0; i < c.Size(); { 
+        if cur < max {
+            cur++
+            go func(j int) {
+                lk := lock.MakeLock(gamesPerGeneration)
+                lk.ToggleAllBusy()
+                p := 0
+                for k := 0; k < lk.Size(); k++ {
+                    go func(h int) { 
+                        a, b := c.Member(j), cas.MakeAgent(depth)
+                        w := pdGame(a, &b, rounds, true, depth) 
+                        if *w == *a {
+                            p++
+                        }
+                        lk.ToggleFinished(h)
+                    }(k) 
+                }
+                lk.ConcurrentJoin()
+                f[j] = float64(p)
+                if !squelch {
+                    x += float64(gamesPerGeneration)
+                    y := int(x / float64(c.Size() * gamesPerGeneration) * 100)
+                    if y > z {
+                        z = y
+                        if z % 10 == 0 {
+                            fmt.Printf("\tGeneration %d percent finished\n", z)
+                            fmt.Printf("\t\t%d / %d goroutines being used.\n", cur, max)
+                        }
                     }
-                    lk.ToggleFinished(h)
-                }(k) 
-            }
-            lk.ConcurrentJoin()
-            f[j] = float64(p)
-            c.Lock.ToggleFinished(j)
-        }(i)
+                }
+                cur--
+                c.Lock.ToggleFinished(j)
+            }(i)
+            i++
+        }
     } 
     c.Lock.ConcurrentJoin()
     // Calculate fitness for current generation:
@@ -294,7 +331,7 @@ func pdGeneration(c *cas.Cohort, rounds int, depth int, gamesPerGeneration int) 
     for i := range f { 
         s += f[i]
     }
-    c.SetFitness(util.Percent(s, float64(len(f) * GAMES_PER_GENERATION)))
+    c.SetFitness(util.Percent(s, float64(len(f) * gamesPerGeneration)))
 }
 
 /* To find the champ, each member of the Cohort plays each other member of

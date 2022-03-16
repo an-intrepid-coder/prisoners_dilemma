@@ -1,35 +1,36 @@
 package cas
 
 import (
-     "math/rand"
-)
+    "math/rand"
 
-const (
-    /* NOTE: Right now the Decision Depth is hard-coded
-       at 3 turns, which takes 64 Classifier "bits" (but 
-       not really bits as each one here is an integer word 
-       in size despite being a 1 or 0).  */
-    CLASSIFIER_BITS = 64
+    "github.com/prisoners_dilemma/util"
 )
 
 type Classifier struct {
     rule []int
+    depth int
+}
+
+func (c *Classifier) Depth() int {
+    return c.depth
 }
 
 func (c *Classifier) Rule() []int {
     return c.rule
 }
 
-func (c *Classifier) init() {
-    c.rule = make([]int, CLASSIFIER_BITS)
-    for i := 0; i < CLASSIFIER_BITS; i++ {
+func (c *Classifier) init(d int) { 
+    b := util.Pow2Int(d * 2)       
+    c.rule = make([]int, b)       
+    for i := 0; i < b; i++ {
         c.rule[i] = rand.Intn(2)
     }
+    c.depth = d
 }
 
-func MakeClassifier() Classifier {
+func MakeClassifier(d int) Classifier {
     c := Classifier{}
-    c.init()
+    c.init(d)
     return c
 }
 
@@ -58,10 +59,11 @@ func (c *Classifier) CalcMove(s []int) int {
    Classifiers by performing "Genetic Crossover" on their
    rules.  */
 func (c *Classifier) Combine(d *Classifier, freq int) []Classifier {
-    a, b := MakeClassifier(), MakeClassifier()
+    a, b := MakeClassifier(c.Depth()), MakeClassifier(c.Depth())
 
     // A random pivot is chosen:
-    p := rand.Intn(CLASSIFIER_BITS)
+    l := util.Pow2Int(c.Depth() * 2)
+    p := rand.Intn(l)
     
     // Points before the pivot are overlaid on to the 
     // new Rules:
@@ -71,7 +73,7 @@ func (c *Classifier) Combine(d *Classifier, freq int) []Classifier {
     }
     // Points from the pivot onward are swapped
     // from parent to offspring:
-    for i := p; i < CLASSIFIER_BITS; i++ {
+    for i := p; i < l; i++ {
         a.rule[i] = c.rule[i]
         b.rule[i] = d.rule[i]
     }
@@ -82,7 +84,7 @@ func (c *Classifier) Combine(d *Classifier, freq int) []Classifier {
         }
         return n
     } 
-    for i := 0; i < CLASSIFIER_BITS; i++ { 
+    for i := 0; i < l; i++ { 
         a.rule[i] = f(a.rule[i])
         b.rule[i] = f(b.rule[i])
     }

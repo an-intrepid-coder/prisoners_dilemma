@@ -23,15 +23,19 @@ type Agent struct {
     Metadata AgentMetadata
 }
 
+func (a *Agent) Depth() int {
+    return a.classifier.Depth()
+}
+
 // Returns the classifier rule for this agent:
 func (a *Agent) Rule() []int {
     return a.classifier.Rule()
 }
 
-func (a *Agent) init() {
+func (a *Agent) init(d int) {
     a.id = numAgents
     numAgents++
-    c := MakeClassifier()
+    c := MakeClassifier(d)
     a.classifier = &c
     a.resources = 0
     a.Metadata = AgentMetadata{a.id, 0, 0, 0, 0, 0.0}
@@ -46,16 +50,16 @@ func (a *Agent) CalcMove(s []int) int {
    genetically crossed over reproductions of the parent
    Classifiers.  */
 func (a *Agent) Combine(b *Agent, freq int) []Agent {
-    c, d := MakeAgent(), MakeAgent()
+    c, d := MakeAgent(a.Depth()), MakeAgent(a.Depth())
     s := a.classifier.Combine(b.classifier, freq)
     c.classifier = &s[0]
     d.classifier = &s[1]
     return []Agent{c, d}
 }
 
-func MakeAgent() Agent {
+func MakeAgent(d int) Agent {
     a := Agent{}
-    a.init()
+    a.init(d)
     return a
 }
 

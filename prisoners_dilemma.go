@@ -38,7 +38,6 @@ func DiscoverPdRule(seed int64,
                     mutationFrequency int,
                     controlSampleSize int,
                     gamesPerGen int) DiscoverPdRuleMetadata {
-
     // Seed the PRNG (NOTE: currently does not result in step-for-step reproducibility)
     if seed == USE_SYSTEM_TIME {
         rand.Seed(seed)
@@ -60,7 +59,7 @@ func DiscoverPdRule(seed int64,
         }
 
         // Process the generation:
-        pdGeneration(&c, numRounds, depth, gamesPerGen, squelch)
+        pdGeneration(&c, numRounds, depth, gamesPerGen)
 
         // Evolve the Cohort:
         c.Evolve(rThreshold, c.Generation() + 1, mutationFrequency)
@@ -142,13 +141,14 @@ func pdTestAgentAgainstSamples(a *cas.Agent,
     cw, cl := 0, 0 
     lk := lock.MakeLock(samples)
     lk.ToggleAllBusy()
-    x := 0.0
-    z := 0
     cur := 0
-    size := util.Pow2Int(depth * 2) * 32 * 2
-    max := SPACE_CAP / size
+    max := GOROUTINE_CAP
     for i := 0; i < samples; {
         if cur < max {
+            if !squelch {
+                x := util.Percent(float64(i), float64(samples))
+                fmt.Printf("\tSampling is %.02f percent finished.\n", x)
+            }
             cur++
             go func(k int) {
                 b := cas.MakeAgent(depth)
@@ -157,18 +157,6 @@ func pdTestAgentAgainstSamples(a *cas.Agent,
                     cw++
                 } else {
                     cl++
-                }
-                if !squelch {
-                    x += 1.0
-                    y := int(x / float64(samples) * 100.0)
-                    if y > z {
-                        z = y
-                        if z % 10 == 0 {
-                            fmt.Printf("Samples %d percent finished...\n", z)
-                            fmt.Printf("\t%d samples run so far\n", i)
-                            fmt.Printf("\t%d / %d games currently running\n", cur, max)
-                        }
-                    }
                 }
                 cur--
                 lk.ToggleFinished(k)
@@ -279,19 +267,14 @@ func pdGame(a *cas.Agent, b *cas.Agent, rounds int, counts bool, depth int) *cas
 func pdGeneration(c *cas.Cohort, 
                   rounds int, 
                   depth int, 
-                  gamesPerGeneration int,
-                  squelch bool) {
+                  gamesPerGeneration int) {
     c.Lock.ToggleAllBusy()
     f := make([]float64, c.Size())
     cur := 0
-    size := util.Pow2Int(depth * 2) * 32 * 2 * gamesPerGeneration
-    // TODO: Double check this one ^
-    max := SPACE_CAP / size
-    x := 0.0 //
-    z := 0   //
+    max := GOROUTINE_CAP
     for i := 0; i < c.Size(); { 
         if cur < max {
-            cur++
+            cur += gamesPerGeneration
             go func(j int) {
                 lk := lock.MakeLock(gamesPerGeneration)
                 lk.ToggleAllBusy()
@@ -308,18 +291,7 @@ func pdGeneration(c *cas.Cohort,
                 }
                 lk.ConcurrentJoin()
                 f[j] = float64(p)
-                if !squelch {
-                    x += float64(gamesPerGeneration)
-                    y := int(x / float64(c.Size() * gamesPerGeneration) * 100)
-                    if y > z {
-                        z = y
-                        if z % 10 == 0 {
-                            fmt.Printf("\tGeneration %d percent finished\n", z)
-                            fmt.Printf("\t\t%d / %d goroutines being used.\n", cur, max)
-                        }
-                    }
-                }
-                cur--
+                cur -= gamesPerGeneration
                 c.Lock.ToggleFinished(j)
             }(i)
             i++
@@ -337,21 +309,30 @@ func pdGeneration(c *cas.Cohort,
 /* To find the champ, each member of the Cohort plays each other member of
 the Cohort (including themselves), and the winner is the one with the
 most wins.  */
-func pdChamp(c *cas.Cohort, rounds int, depth int) *cas.Agent {
+func pdChamp(c *cas.Cohort, 
+             rounds int, 
+             depth int) *cas.Agent {
     r := make([]int, c.Size()) 
     c.Lock.ToggleAllBusy()
-    for i := range r {
-        go func(k int) {
-            a := c.Member(k)
-            for j := range r {
-                b := c.Member(j)
-                w := pdGame(a, b, rounds, false, depth)
-                if w.Id() == a.Id() {
-                    r[k]++
+    cur := 0
+    max := GOROUTINE_CAP
+    for i := 0; i < len(r); {
+        if cur < max {
+            cur++
+            go func(k int) {
+                a := c.Member(k)
+                for j := range r {
+                    b := c.Member(j)
+                    w := pdGame(a, b, rounds, false, depth)
+                    if w.Id() == a.Id() {
+                        r[k]++
+                    }
                 }
-            }
-            c.Lock.ToggleFinished(k)
-        }(i)
+                c.Lock.ToggleFinished(k)
+            }(i)
+            cur--
+            i++
+        }
     }
     c.Lock.ConcurrentJoin()
     var v *cas.Agent
